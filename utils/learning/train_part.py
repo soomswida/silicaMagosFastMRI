@@ -1,6 +1,7 @@
 import shutil
 import numpy as np
 import torch
+from torch.optim.lr_scheduler import OneCycleLR
 import torch.nn as nn
 import time
 from pathlib import Path
@@ -14,7 +15,7 @@ from utils.model.varnet import VarNet
 
 import os
 
-def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
+def train_epoch(args, epoch, model, data_loader, optimizer, scheduler, loss_type):
     model.train()
     start_epoch = start_iter = time.perf_counter()
     len_loader = len(data_loader)
@@ -32,6 +33,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        scheduler.step()
         total_loss += loss.item()
 
         if iter % args.report_interval == 0:
@@ -39,6 +41,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
                 f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
                 f'Iter = [{iter:4d}/{len(data_loader):4d}] '
                 f'Loss = {loss.item():.4g} '
+                f'LR = {scheduler.get_last_lr()[0]:.3e} '
                 f'Time = {time.perf_counter() - start_iter:.4f}s',
             )
             start_iter = time.perf_counter()
@@ -112,11 +115,21 @@ def train(args):
     train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
     val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
     
+    scheduler = OneCycleLR(
+        optimizer,
+        max_lr = args.lr,
+        epochs = args.num_epochs,
+        steps_per_epoch = len(train_loader),
+        pct_start = 0.3,
+        div_factor = 25,
+        final_div_factor = 1e4,
+    )
+
     val_loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, args.num_epochs):
         print(f'Epoch #{epoch:2d} ............... {args.net_name} ...............')
         
-        train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type)
+        train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, scheduler, loss_type)
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
         
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
