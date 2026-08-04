@@ -78,10 +78,14 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False):
         target_key=target_key_,
         forward = isforward
     )
-
+    # [Kim] Parrellel data loading 
     data_loader = DataLoader(
         dataset=data_storage,
         batch_size=args.batch_size,
         shuffle=shuffle,
+        num_workers=args.num_workers,   # Added
+        pin_memory=True,                # Added
+        prefetch_factor=2 if args.num_workers > 0 else None, # Added
+        persistent_workers=True if args.num_workers > 0 else None, # Added 
     )
     return data_loader
