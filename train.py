@@ -33,6 +33,8 @@ def parse():
     parser.add_argument('--max-key', type=str, default='max', help='Name of max key in attributes')
     parser.add_argument('--seed', type=int, default=430, help='Fix random seed')
 
+    parser.add_argument('--accumulation_steps', type=int, default=1, help='Number of micro-batches to accumulate gradients over before each optimizer step')
+
     args = parser.parse_args()
     return args
 

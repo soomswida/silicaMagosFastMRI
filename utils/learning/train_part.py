@@ -4,6 +4,7 @@ import torch
 from torch.optim.lr_scheduler import OneCycleLR
 import torch.nn as nn
 import time
+import math
 from pathlib import Path
 import copy
 
@@ -20,7 +21,9 @@ def train_epoch(args, epoch, model, data_loader, optimizer, scheduler, loss_type
     start_epoch = start_iter = time.perf_counter()
     len_loader = len(data_loader)
     total_loss = 0.
+    grad_norm = torch.tensor(0.)
 
+    optimizer.zero_grad()
     for iter, data in enumerate(data_loader):
         mask, kspace, target, maximum, _, _ = data
         mask = mask.cuda(non_blocking=True)
@@ -30,11 +33,15 @@ def train_epoch(args, epoch, model, data_loader, optimizer, scheduler, loss_type
 
         output = model(kspace, mask)
         loss = loss_type(output, target, maximum)
-        optimizer.zero_grad()
-        loss.backward()
-        grad_norm = nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
-        scheduler.step()
+        (loss / args.accumulation_steps).backward()
+
+        is_accum_boundary = (iter + 1) % args.accumulation_steps == 0
+        is_last_iter = (iter + 1) == len_loader
+        if is_accum_boundary or is_last_iter:
+            grad_norm = nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
         total_loss += loss.item()
 
         if iter % args.report_interval == 0:
@@ -121,7 +128,7 @@ def train(args):
         optimizer,
         max_lr = args.lr,
         epochs = args.num_epochs,
-        steps_per_epoch = len(train_loader),
+        steps_per_epoch = math.ceil(len(train_loader) / args.accumulation_steps),
         pct_start = 0.3,
         div_factor = 25,
         final_div_factor = 1e4,
