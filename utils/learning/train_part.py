@@ -32,6 +32,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, scheduler, loss_type
         loss = loss_type(output, target, maximum)
         optimizer.zero_grad()
         loss.backward()
+        grad_norm = nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
         scheduler.step()
         total_loss += loss.item()
@@ -42,6 +43,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, scheduler, loss_type
                 f'Iter = [{iter:4d}/{len(data_loader):4d}] '
                 f'Loss = {loss.item():.4g} '
                 f'LR = {scheduler.get_last_lr()[0]:.3e} '
+                f'GradNorm = {grad_norm:.3e} '
                 f'Time = {time.perf_counter() - start_iter:.4f}s',
             )
             start_iter = time.perf_counter()
