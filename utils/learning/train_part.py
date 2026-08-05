@@ -111,7 +111,8 @@ def train(args):
 
     model = VarNet(num_cascades=args.cascade, 
                    chans=args.chans, 
-                   sens_chans=args.sens_chans)
+                   sens_chans=args.sens_chans,
+                   use_checkpoint=args.grad_checkpointing)
     model.to(device=device)
 
     loss_type = SSIMLoss().to(device=device)

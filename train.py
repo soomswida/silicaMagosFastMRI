@@ -34,6 +34,8 @@ def parse():
     parser.add_argument('--seed', type=int, default=430, help='Fix random seed')
 
     parser.add_argument('--accumulation_steps', type=int, default=1, help='Number of micro-batches to accumulate gradients over before each optimizer step')
+    parser.add_argument('--grad-checkpointing', action='store_true',
+    help='Enable gradient checkpointing on VarNet cascades to trade ~30 percent more compute for lower peak memory')
 
     args = parser.parse_args()
     return args
