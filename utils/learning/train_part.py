@@ -121,6 +121,19 @@ def train(args):
     best_val_loss = 1.
     start_epoch = 0
 
+    best_ckpt_path = args.exp_dir / 'best_model.pt'
+    if not args.no_resume and best_ckpt_path.exists():
+        checkpoint = torch.load(best_ckpt_path, map_location=device)
+        model.load_state_dict(checkpoint['model'])
+        if 'optimizer' in checkpoint:
+            optimizer.load_state_dict(checkpoint['optimizer'])
+        start_epoch = checkpoint.get('epoch', 0)
+        best_val_loss = checkpoint.get('best_val_loss', 1.)
+        print(f'Resuming from best checkpoint {best_ckpt_path} '
+              f'(epoch {start_epoch}, best val loss {best_val_loss:.4g})')
+    elif args.no_resume:
+        print('--no-resume set: starting training from scratch')
+
     
     train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
     val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
