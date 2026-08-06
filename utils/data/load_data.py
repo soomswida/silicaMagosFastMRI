@@ -15,7 +15,7 @@ class SliceData(Dataset):
         self.kspace_examples = []
 
         if not forward:
-            image_files = list(Path(root / "image").iterdir())
+            image_files = [f for f in Path(root / "image").iterdir() if f.is_file() and not f.name.startswith(".")]
             for fname in sorted(image_files):
                 num_slices = self._get_metadata(fname)
 
@@ -23,7 +23,7 @@ class SliceData(Dataset):
                     (fname, slice_ind) for slice_ind in range(num_slices)
                 ]
 
-        kspace_files = list(Path(root / "kspace").iterdir())
+        kspace_files = [f for f in Path(root / "kspace").iterdir() if f.is_file() and not f.name.startswith(".")]
         for fname in sorted(kspace_files):
             num_slices = self._get_metadata(fname)
 
@@ -78,10 +78,14 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False):
         target_key=target_key_,
         forward = isforward
     )
-
+    # [Kim] Parrellel data loading 
     data_loader = DataLoader(
         dataset=data_storage,
         batch_size=args.batch_size,
         shuffle=shuffle,
+        num_workers=args.num_workers,   # Added
+        pin_memory=True,                # Added
+        prefetch_factor=2 if args.num_workers > 0 else None, # Added
+        persistent_workers=True if args.num_workers > 0 else None, # Added 
     )
     return data_loader
