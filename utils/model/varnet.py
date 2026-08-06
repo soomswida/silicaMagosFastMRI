@@ -12,6 +12,7 @@ import fastmri
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 from fastmri.data import transforms
 
 from unet import Unet
@@ -216,6 +217,8 @@ class VarNet(nn.Module):
         sens_pools: int = 4,
         chans: int = 18,
         pools: int = 4,
+        # gradient checkpointing
+        use_checkpoint: bool = False,
     ):
         """
         Args:
@@ -227,6 +230,9 @@ class VarNet(nn.Module):
             chans: Number of channels for cascade U-Net.
             pools: Number of downsampling and upsampling layers for cascade
                 U-Net.
+            use_checkpoint: If True, recompute each cascade's activations
+                during backward instead of storing them, trading compute for
+                memory. Only takes effect in training mode.
         """
         super().__init__()
 
@@ -234,13 +240,19 @@ class VarNet(nn.Module):
         self.cascades = nn.ModuleList(
             [VarNetBlock(NormUnet(chans, pools)) for _ in range(num_cascades)]
         )
+        self.use_checkpoint = use_checkpoint
 
     def forward(self, masked_kspace: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         sens_maps = self.sens_net(masked_kspace, mask)
         kspace_pred = masked_kspace.clone()
 
         for cascade in self.cascades:
-            kspace_pred = cascade(kspace_pred, masked_kspace, mask, sens_maps)
+            if self.use_checkpoint and self.training:
+                kspace_pred = checkpoint(
+                    cascade, kspace_pred, masked_kspace, mask, sens_maps, use_reentrant=False
+                )
+            else:
+                kspace_pred = cascade(kspace_pred, masked_kspace, mask, sens_maps)
         result = fastmri.rss(fastmri.complex_abs(fastmri.ifft2c(kspace_pred)), dim=1)
         result = center_crop(result, 384, 384)
         return result
