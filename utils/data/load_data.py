@@ -15,7 +15,7 @@ class SliceData(Dataset):
         self.kspace_examples = []
 
         if not forward:
-            image_files = list(Path(root / "image").iterdir())
+            image_files = [f for f in Path(root / "image").iterdir() if f.is_file() and not f.name.startswith(".")]
             for fname in sorted(image_files):
                 num_slices = self._get_metadata(fname)
 
@@ -23,7 +23,7 @@ class SliceData(Dataset):
                     (fname, slice_ind) for slice_ind in range(num_slices)
                 ]
 
-        kspace_files = list(Path(root / "kspace").iterdir())
+        kspace_files = [f for f in Path(root / "kspace").iterdir() if f.is_file() and not f.name.startswith(".")]
         for fname in sorted(kspace_files):
             num_slices = self._get_metadata(fname)
 
