@@ -18,10 +18,13 @@ INPUT_KIND = "kspace"      # harness delivers the kspace H5 to prep_volume
 
 
 def load_model(args, device):
-    model = AccVarNet(num_cascades=args.cascade,
-                      chans=args.chans,
-                      sens_chans=args.sens_chans).to(device=device)
     checkpoint = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)
+    # Rebuild the model with the hyperparameters it was trained with (stored in
+    # the checkpoint), so eval works regardless of the harness CLI defaults.
+    train_args = checkpoint.get('args', args)
+    model = AccVarNet(num_cascades=getattr(train_args, 'cascade', args.cascade),
+                      chans=getattr(train_args, 'chans', args.chans),
+                      sens_chans=getattr(train_args, 'sens_chans', args.sens_chans)).to(device=device)
     model.load_state_dict(checkpoint['model'])
     model.eval()
     return model
