@@ -121,6 +121,7 @@ def train(args):
     best_val_loss = 1.
     start_epoch = 0
 
+    # [Kim] Make the best weight loaded back
     best_ckpt_path = args.exp_dir / 'best_model.pt'
     if not args.no_resume and best_ckpt_path.exists():
         checkpoint = torch.load(best_ckpt_path, map_location=device)
