@@ -34,6 +34,8 @@ def parse():
     parser.add_argument('--target-key', type=str, default='image_label', help='Name of target key')
     parser.add_argument('--max-key', type=str, default='max', help='Name of max key in attributes')
     parser.add_argument('--seed', type=int, default=430, help='Fix random seed')
+    parser.add_argument('--no-resume', action='store_true',
+    help='Do not load the best checkpoint from a previous run; train from scratch')
 
     parser.add_argument('--accumulation_steps', type=int, default=1, help='Number of micro-batches to accumulate gradients over before each optimizer step')
     parser.add_argument('--grad-checkpointing', action='store_true',
