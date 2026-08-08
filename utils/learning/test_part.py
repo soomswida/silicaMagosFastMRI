@@ -6,7 +6,7 @@ from collections import defaultdict
 from utils.common.utils import save_reconstructions
 from utils.data.load_data import create_data_loaders
 from utils.data.transforms import to_tensor
-from utils.model.acc_varnet import AccVarNet
+from utils.model.acc_sdum import build_acc_sdum
 
 # ---------------------------------------------------------------------------
 # Team-editable reconstruction contract.
@@ -17,11 +17,20 @@ from utils.model.acc_varnet import AccVarNet
 INPUT_KIND = "kspace"      # harness delivers the kspace H5 to prep_volume
 
 
+# model hyperparameters normally come from checkpoint['args']; these names can
+# be overridden from the CLI via matching `sdum_*` attributes (see reconstruct.py)
+_OVERRIDABLE = ('cascade', 'channels', 'num_blocks', 'num_heads', 'num_refinement',
+                'mlp_ratio', 'csm_chans', 'csm_pools', 'no_dc_weight_map')
+
+
 def load_model(args, device):
-    model = AccVarNet(num_cascades=args.cascade,
-                      chans=args.chans,
-                      sens_chans=args.sens_chans).to(device=device)
     checkpoint = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)
+    ck_args = checkpoint['args']
+    for name in _OVERRIDABLE:
+        override = getattr(args, f'sdum_{name}', None)
+        if override is not None:
+            setattr(ck_args, name, override)
+    model = build_acc_sdum(ck_args, checkpoint_mode='off').to(device=device)
     model.load_state_dict(checkpoint['model'])
     model.eval()
     return model

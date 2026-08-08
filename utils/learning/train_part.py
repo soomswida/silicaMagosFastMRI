@@ -1,7 +1,6 @@
 import shutil
 import numpy as np
 import torch
-from torch.optim.lr_scheduler import OneCycleLR
 import torch.nn as nn
 import time
 import math
@@ -12,11 +11,30 @@ from collections import defaultdict
 from utils.data.load_data import create_data_loaders
 from utils.common.utils import save_reconstructions, ssim_loss
 from utils.common.loss_function import SSIMLoss
-from utils.model.acc_varnet import AccVarNet, classify_acc
+from utils.model.acc_sdum import build_acc_sdum, classify_acc
 
 import os
 
-def train_epoch(args, epoch, model, data_loader, optimizer, scheduler, loss_type):
+
+def adjust_learning_rate(optimizer, epoch_f, args):
+    """Linear warmup then half-cycle cosine decay, driven by the fractional
+    epoch (epoch + iter/len(loader)). Stateless: resuming at epoch k lands on
+    the exact schedule position without any saved scheduler state."""
+    if epoch_f < args.warmup_epochs:
+        lr = args.lr * epoch_f / args.warmup_epochs
+    elif args.lr_schedule == 'constant':
+        lr = args.lr
+    else:  # cosine
+        lr = args.min_lr + (args.lr - args.min_lr) * 0.5 * (
+            1.0 + math.cos(math.pi * (epoch_f - args.warmup_epochs)
+                           / (args.num_epochs - args.warmup_epochs))
+        )
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+    return lr
+
+
+def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
     model.train()
     start_epoch = start_iter = time.perf_counter()
     len_loader = len(data_loader)
@@ -25,6 +43,8 @@ def train_epoch(args, epoch, model, data_loader, optimizer, scheduler, loss_type
 
     optimizer.zero_grad()
     for iter, data in enumerate(data_loader):
+        lr = adjust_learning_rate(optimizer, epoch + iter / len_loader, args)
+
         mask, kspace, target, maximum, _, _ = data
         mask = mask.cuda(non_blocking=True)
         kspace = kspace.cuda(non_blocking=True)
@@ -40,7 +60,6 @@ def train_epoch(args, epoch, model, data_loader, optimizer, scheduler, loss_type
         if is_accum_boundary or is_last_iter:
             grad_norm = nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
-            scheduler.step()
             optimizer.zero_grad()
         total_loss += loss.item()
 
@@ -49,7 +68,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, scheduler, loss_type
                 f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
                 f'Iter = [{iter:4d}/{len(data_loader):4d}] '
                 f'Loss = {loss.item():.4g} '
-                f'LR = {scheduler.get_last_lr()[0]:.3e} '
+                f'LR = {lr:.3e} '
                 f'GradNorm = {grad_norm:.3e} '
                 f'Time = {time.perf_counter() - start_iter:.4f}s',
             )
@@ -117,20 +136,23 @@ def train(args):
     torch.cuda.set_device(device)
     print('Current cuda device: ', torch.cuda.current_device())
 
-    model = AccVarNet(num_cascades=args.cascade,
-                      chans=args.chans,
-                      sens_chans=args.sens_chans,
-                      use_checkpoint=args.grad_checkpointing)
+    model = build_acc_sdum(args)
     model.to(device=device)
 
     if getattr(args, 'init_from', None):
         ck = torch.load(args.init_from, map_location=device, weights_only=False)
-        model.varnet4.load_state_dict(ck['model'])
-        model.varnet8.load_state_dict(ck['model'])
-        print(f'Initialized both sub-nets from single-VarNet checkpoint {args.init_from}')
+        sd = ck['model'] if 'model' in ck else ck
+        if any(k.startswith('sdum4.') for k in sd):
+            model.load_state_dict(sd)
+            print(f'Initialized full AccSDUM from checkpoint {args.init_from}')
+        else:
+            model.sdum4.load_state_dict(sd)
+            model.sdum8.load_state_dict(sd)
+            print(f'Initialized both sub-nets from single-SDUM checkpoint {args.init_from}')
 
     loss_type = SSIMLoss().to(device=device)
-    optimizer = torch.optim.Adam(model.parameters(), args.lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
+                                  weight_decay=args.weight_decay)
 
     best_val_loss = 1.
     start_epoch = 0
@@ -152,22 +174,12 @@ def train(args):
     
     train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
     val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
-    
-    scheduler = OneCycleLR(
-        optimizer,
-        max_lr = args.lr,
-        epochs = args.num_epochs,
-        steps_per_epoch = math.ceil(len(train_loader) / args.accumulation_steps),
-        pct_start = 0.3,
-        div_factor = 25,
-        final_div_factor = 1e4,
-    )
 
     val_loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, args.num_epochs):
         print(f'Epoch #{epoch:2d} ............... {args.net_name} ...............')
-        
-        train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, scheduler, loss_type)
+
+        train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type)
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
         
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)

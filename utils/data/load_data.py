@@ -1,9 +1,18 @@
 import h5py
 import random
+import torch
 from utils.data.transforms import DataTransform
 from torch.utils.data import Dataset, DataLoader
 from pathlib import Path
 import numpy as np
+
+
+def _worker_init_fn(worker_id):
+    # torch.initial_seed() in a worker is base_seed + worker_id (derived from
+    # the loader generator), so numpy/random become reproducible per worker
+    seed = torch.initial_seed() % 2**32
+    np.random.seed(seed)
+    random.seed(seed)
 
 class SliceData(Dataset):
     def __init__(self, root, transform, input_key, target_key, forward=False):
@@ -78,7 +87,11 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False):
         target_key=target_key_,
         forward = isforward
     )
-    # [Kim] Parrellel data loading 
+    generator = None
+    if shuffle and getattr(args, 'seed', None) is not None:
+        generator = torch.Generator()
+        generator.manual_seed(args.seed)
+    # [Kim] Parrellel data loading
     data_loader = DataLoader(
         dataset=data_storage,
         batch_size=args.batch_size,
@@ -86,6 +99,8 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False):
         num_workers=args.num_workers,   # Added
         pin_memory=True,                # Added
         prefetch_factor=2 if args.num_workers > 0 else None, # Added
-        persistent_workers=True if args.num_workers > 0 else None, # Added 
+        persistent_workers=True if args.num_workers > 0 else None, # Added
+        generator=generator,
+        worker_init_fn=_worker_init_fn,
     )
     return data_loader
