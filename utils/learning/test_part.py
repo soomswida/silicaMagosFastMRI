@@ -6,7 +6,7 @@ from collections import defaultdict
 from utils.common.utils import save_reconstructions
 from utils.data.load_data import create_data_loaders
 from utils.data.transforms import to_tensor
-from utils.model.varnet import VarNet
+from utils.model.acc_varnet import AccVarNet
 
 # ---------------------------------------------------------------------------
 # Team-editable reconstruction contract.
@@ -18,9 +18,9 @@ INPUT_KIND = "kspace"      # harness delivers the kspace H5 to prep_volume
 
 
 def load_model(args, device):
-    model = VarNet(num_cascades=args.cascade,
-                   chans=args.chans,
-                   sens_chans=args.sens_chans).to(device=device)
+    model = AccVarNet(num_cascades=args.cascade,
+                      chans=args.chans,
+                      sens_chans=args.sens_chans).to(device=device)
     checkpoint = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)
     model.load_state_dict(checkpoint['model'])
     model.eval()

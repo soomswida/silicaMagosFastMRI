@@ -12,7 +12,7 @@ from collections import defaultdict
 from utils.data.load_data import create_data_loaders
 from utils.common.utils import save_reconstructions, ssim_loss
 from utils.common.loss_function import SSIMLoss
-from utils.model.varnet import VarNet
+from utils.model.acc_varnet import AccVarNet, classify_acc
 
 import os
 
@@ -62,6 +62,7 @@ def validate(args, model, data_loader):
     model.eval()
     reconstructions = defaultdict(dict)
     targets = defaultdict(dict)
+    acc_of_fname = {}
     start = time.perf_counter()
 
     with torch.no_grad():
@@ -71,7 +72,9 @@ def validate(args, model, data_loader):
             mask = mask.cuda(non_blocking=True)
             output = model(kspace, mask)
 
+            acc = classify_acc(mask)
             for i in range(output.shape[0]):
+                acc_of_fname[fnames[i]] = acc
                 reconstructions[fnames[i]][int(slices[i])] = output[i].cpu().numpy()
                 targets[fnames[i]][int(slices[i])] = target[i].numpy()
 
@@ -83,8 +86,13 @@ def validate(args, model, data_loader):
         targets[fname] = np.stack(
             [out for _, out in sorted(targets[fname].items())]
         )
-    metric_loss = sum([ssim_loss(targets[fname], reconstructions[fname]) for fname in reconstructions])
+    losses = {fname: ssim_loss(targets[fname], reconstructions[fname]) for fname in reconstructions}
+    metric_loss = sum(losses.values())
     num_subjects = len(reconstructions)
+    for acc in (4, 8):
+        fns = [f for f in losses if acc_of_fname[f] == acc]
+        if fns:
+            print(f'  Val(acc{acc}): {sum(losses[f] for f in fns) / len(fns):.4g} ({len(fns)} subjects)')
     return metric_loss, num_subjects, reconstructions, targets, None, time.perf_counter() - start
 
 
@@ -109,11 +117,17 @@ def train(args):
     torch.cuda.set_device(device)
     print('Current cuda device: ', torch.cuda.current_device())
 
-    model = VarNet(num_cascades=args.cascade, 
-                   chans=args.chans, 
-                   sens_chans=args.sens_chans,
-                   use_checkpoint=args.grad_checkpointing)
+    model = AccVarNet(num_cascades=args.cascade,
+                      chans=args.chans,
+                      sens_chans=args.sens_chans,
+                      use_checkpoint=args.grad_checkpointing)
     model.to(device=device)
+
+    if getattr(args, 'init_from', None):
+        ck = torch.load(args.init_from, map_location=device, weights_only=False)
+        model.varnet4.load_state_dict(ck['model'])
+        model.varnet8.load_state_dict(ck['model'])
+        print(f'Initialized both sub-nets from single-VarNet checkpoint {args.init_from}')
 
     loss_type = SSIMLoss().to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), args.lr)

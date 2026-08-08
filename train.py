@@ -37,6 +37,8 @@ def parse():
     parser.add_argument('--no-resume', action='store_true',
     help='Do not load the best checkpoint from a previous run; train from scratch')
 
+    parser.add_argument('--init-from', type=Path, default=None,
+    help='Path to a single-VarNet best_model.pt used to initialize BOTH acc4/acc8 sub-networks')
     parser.add_argument('--accumulation_steps', type=int, default=1, help='Number of micro-batches to accumulate gradients over before each optimizer step')
     parser.add_argument('--grad-checkpointing', action='store_true',
     help='Enable gradient checkpointing on VarNet cascades to trade ~30 percent more compute for lower peak memory')
