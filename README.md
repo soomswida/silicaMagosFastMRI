@@ -201,8 +201,8 @@ requires for re-training verification. Batch size 1 is forced by the variable k-
 
 ## Team
 
-- Kirill Cebekov ([@ManilaSR57](https://github.com/ManilaSR57)): acceleration-aware dual network and routing classifier, training optimizations (OneCycle LR, clipping, accumulation, gradient checkpointing), SDUM experiment
-- Kyoheon Kim ([@soomswida](https://github.com/soomswida)): checkpoint resume, data-loading pipeline, preprocessing and evaluation fixes
+- Kyoheon Kim ([@soomswida](https://github.com/soomswida))
+- Kirill Tsebekov ([@ManilaSR57](https://github.com/ManilaSR57))
 
 ## Acknowledgements
 
