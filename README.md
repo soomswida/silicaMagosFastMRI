@@ -1,137 +1,223 @@
-# 2026 baby varnet (annotation)
-2026 SNU FastMRI challenge — knee annotation track
+# silicaMagos FastMRI: acceleration-aware E2E-VarNet
 
-* 본 baseline은 **E2E-VarNet** 구조입니다. (baby unet 대비 kspace + sensitivity map을 직접 다룹니다.)
-* 본 대회는 **knee 데이터만** 사용합니다.
-* 복원 품질은 두 가지 SSIM으로 평가합니다.
-  * **SSIM_full**: foreground mask 내부 영역에 대해 평균한 SSIM
-  * **SSIM_bbox**: fastMRI+ 병변 bounding-box 영역 안에서만 계산한 SSIM
+Team entry for the **2026 SNU FastMRI Challenge** (knee annotation track): reconstructing
+384x384 knee MR images from 4x- and 8x-undersampled multi-coil k-space, scored by SSIM over the
+foreground and over lesion bounding boxes, plus per-slice reconstruction time.
 
-## 1. 폴더 계층
+Starting from the organiser's "baby VarNet" baseline (an End-to-End Variational Network), we
+made two kinds of changes:
 
-### 폴더의 전체 구조
-![image](docs/fastmri_folder_structure.png)
-* `FastMRI_challenge`, `Data`, `result` 폴더가 위의 구조대로 설정되어 있어야 default argument를 활용할 수 있습니다.
-* 본 github repository는 `FastMRI_challenge` 폴더입니다.
-* `Data` 폴더는 MRI data 파일을 담고 있으며 아래에 상세 구조를 첨부하겠습니다.
-* `result` 폴더는 학습한 모델의 weights을 기록하고 validation, leaderboard dataset의 reconstruction image를 저장하는데 활용되며, 아래에 상세 구조를 첨부하겠습니다.
+- **Acceleration-aware dual network.** Two VarNets, one specialised per undersampling factor,
+  selected per input by a deterministic classifier that reads only the undersampling mask. The
+  baseline trained one network blindly on the acc4/acc8 mix; filenames and metadata may not be
+  used, so the mask itself is the routing signal. Details in [docs/acc_routing.md](docs/acc_routing.md).
+- **Training pipeline upgrades** that let the full-size 12-cascade model train on an 8 GB GPU
+  and converge faster: OneCycle learning-rate schedule, gradient clipping, gradient
+  accumulation, per-cascade gradient checkpointing, checkpoint auto-resume and warm start,
+  and parallel data loading. Each change has a design note under [docs/](docs/).
 
-### Data 폴더의 구조
-![image](docs/fastmri_data_structure.png)
-* train, val:
-    * train, val 폴더는 각각 모델을 학습(train), 검증(validation)하는데 사용하며 각각 image, kspace 폴더로 나뉩니다.
-    * 참가자들은 generalization과 representation의 trade-off를 고려하여 train, validation의 set을 자유로이 나눌 수 있습니다.
-    * image와 kspace 폴더에 들어있는 파일의 형식은 다음과 같습니다: knee\_{mask 형식}\_{순번}.h5
-    * ex) knee_acc4_10.h5, knee_acc8_3.h5
-    * {mask 형식}은 "acc4", "acc8" 중 하나입니다.
-    * train은 "acc4", "acc8" 각각 {순번} 1 ~ 85, val은 각각 1 ~ 15 입니다.
-* leaderboard:
-   * **leaderboard는 성능 평가를 위해 활용하는 dataset이므로 절대로 학습 과정에 활용하면 안됩니다.** (제출 코드는 seed 고정 재학습으로 재현 검증합니다.)
-   * leaderboard 폴더는 mask 형식에 따라서 acc4과 acc8 폴더로 나뉩니다.
-   * acc4과 acc8 폴더는 각각 image, kspace 폴더로 나뉩니다.
-   * image와 kspace 폴더에 들어있는 파일의 형식은 다음과 같습니다: knee\_test{순번}.h5
-   * {순번}은 acc4 / acc8 각각 1 ~ 29 사이의 숫자입니다.
+## Results
 
-### Annotation
-* fastMRI+ knee 병변 bounding box는 각 image h5의 `attrs['annotations']`에 JSON으로 저장되어 있습니다.
-* 형식: `{ "<slice>": [ {"x", "y", "width", "height", "label"}, ... ] }` (384 x 384 image 공간 기준, width·height가 16 초과인 박스만 포함)
+Scores are produced by the organiser's fixed harness (`recon_eval.py`) on the leaderboard set,
+averaged over acc4 and acc8. Timing is the mean model forward time per slice at batch size 1.
 
-### result 폴더의 구조
-* result 폴더는 모델의 이름에 따라서 여러 폴더로 나뉠 수 있습니다.
-* test_Unet (혹은 test_Varnet) 폴더는 아래 3개의 폴더로 구성되어 있습니다.
-  * checkpoints - `model.pt`, `best_model.pt`의 정보가 있습니다. 모델의 weights 정보를 담고 있습니다.
-  * reconstructions_val - validation dataset의 reconstruction을 저장합니다. knee\_{mask 형식}\_{순번}.h5 형식입니다. (```train.py``` 참고)
-  * reconstructions_leaderboard - leaderboard dataset의 reconstruction을 acc별로 저장합니다. knee\_test{순번}.h5 형식입니다. (```reconstruct.py``` 참고)
-  * val_loss_log.npy - epoch별로 validation loss를 기록합니다. (```train.py``` 참고)
+| Model | SSIM_full | SSIM_bbox | ms / slice |
+|---|---|---|---|
+| Baseline single VarNet (3 cascades, 12 ch, 6 sens ch) | TODO | TODO | TODO |
+| **Dual VarNet, final** (12 cascades, 18 ch, 8 sens ch) | TODO | TODO | TODO |
 
-## 2. 폴더 정보
+Per-acceleration detail of the final model:
 
-```bash
-├── .gitignore
-├── leaderboard_eval.py
-├── README.md
-├── recon_eval.py
-├── reconstruct.py
+| | SSIM_full | SSIM_bbox | ms / slice |
+|---|---|---|---|
+| acc4 | TODO | TODO | TODO |
+| acc8 | TODO | TODO | TODO |
+
+## Method
+
+### E2E-VarNet recap
+
+The baseline is the End-to-End Variational Network of Sriram et al. [2]. A small U-Net
+estimates coil sensitivity maps from the auto-calibration region, then `num_cascades`
+unrolled blocks each apply a soft data-consistency step in k-space and a U-Net regulariser in
+the image domain. The final k-space estimate is inverse-Fourier-transformed, root-sum-of-squares
+combined over coils and centre-cropped to 384x384. Training minimises an SSIM loss against the
+fully sampled target.
+
+### Acceleration-aware dual network
+
+```
+masked k-space ─┐
+                ├─► classify_acc(mask) ─┬─ acc4 ─► VarNet-4 ─┐
+mask ───────────┘                       └─ acc8 ─► VarNet-8 ─┴─► RSS ─► 384x384 image
+```
+
+`AccVarNet` (`utils/model/acc_varnet.py`) wraps two structurally identical VarNets. The router
+`classify_acc` computes the mask's sampling ratio and compares it to a fixed threshold of 0.25.
+Measured over every training volume, acc4 masks sample 30.9 to 31.2 percent of k-space lines
+and acc8 masks 19.6 to 20.0 percent, so the rule has more than a 20 percent relative margin on
+each side and was correct on all training volumes. The mask is a normal model input (the
+data-consistency term already needs it), so no filename or metadata is consulted.
+
+In mixture-of-experts terms this is a two-expert layout with a **hard, non-learned gate**: a
+fixed threshold selects exactly one expert, so inference costs the same as a single VarNet while
+each expert only ever sees its own undersampling regime. Both experts are trained in a single
+run; each batch updates only the expert it was routed to.
+
+### Training improvements
+
+| Change | Flag / location | Why | Note |
+|---|---|---|---|
+| OneCycle LR schedule | `-l` sets the peak LR | Faster convergence than a constant LR; stepped per optimizer step | [docs/optimization-1cycle-lr.md](docs/optimization-1cycle-lr.md) |
+| Gradient-norm clipping (1.0) | always on, `train_part.py` | Unrolled cascades are prone to gradient spikes near the LR peak | [docs/optimization-gradient-clipping.md](docs/optimization-gradient-clipping.md) |
+| Gradient accumulation | `--accumulation_steps N` | Larger effective batch while memory forces batch size 1 | [docs/optimization-gradient-accumulation.md](docs/optimization-gradient-accumulation.md) |
+| Gradient checkpointing | `--grad-checkpointing` | Peak memory no longer scales with cascade count (about 30% extra compute) | [docs/optimization-gradient-checkpointing.md](docs/optimization-gradient-checkpointing.md) |
+| Auto-resume from best checkpoint | default; `--no-resume` to disable | Restart long runs without losing progress | `train_part.py::train` |
+| Warm start from a single VarNet | `--init-from <best_model.pt>` | Initialise both experts from an already trained single network | [docs/acc_routing.md](docs/acc_routing.md) |
+| Parallel data loading | `--num-workers` (default 4) | Pinned memory, prefetching and persistent workers | `utils/data/load_data.py` |
+| Per-acceleration validation | printed as `Val(acc4)` / `Val(acc8)` | See which regime is lagging during training | `train_part.py::validate` |
+
+## Repository layout
+
+```
+├── train.py                 # training entry point (CLI below)
+├── reconstruct.py           # reconstruct the leaderboard set with best_model.pt
+├── recon_eval.py            # organiser's fixed harness: reconstruct + score + time (do not edit)
+├── leaderboard_eval.py      # score reconstructions already on disk
+├── *.sh                     # ready-made invocations of the scripts above
 ├── requirements.txt
-├── train.py
-├── tutorial.ipynb
+├── docs/                    # design notes and data-layout figures
 └── utils
-│   ├── common
-│   │   ├── loss_function.py
-│   │   ├── metrics.py
-│   │   └── utils.py
-│   ├── data
-│   │   ├── load_data.py
-│   │   └── transforms.py
-│   ├── learning
-│   │   ├── test_part.py
-│   │   └── train_part.py
-│   └── model
-│       ├── fastmri/     # vendored fastMRI 연산 (fft, complex 연산, coil combine 등)
-│       ├── unet.py      # VarNet 내부 regularizer로 쓰이는 U-Net
-│       └── varnet.py    # E2E-VarNet 모델 (SensitivityModel + cascade)
-└── result
+    ├── common
+    │   ├── loss_function.py # SSIM loss
+    │   ├── metrics.py       # SSIM_full / SSIM_bbox scoring (organiser's, do not edit)
+    │   └── utils.py         # seeding, h5 writing, validation SSIM
+    ├── data
+    │   ├── load_data.py     # SliceData dataset + DataLoader factory
+    │   └── transforms.py    # k-space / mask tensor preparation
+    ├── learning
+    │   ├── train_part.py    # training loop, validation, checkpointing
+    │   └── test_part.py     # load_model / prep_volume / recon_slice contract used by recon_eval.py
+    └── model
+        ├── acc_varnet.py    # AccVarNet: mask classifier + two VarNets
+        ├── varnet.py        # E2E-VarNet (sensitivity model + cascades, gradient checkpointing)
+        ├── unet.py          # U-Net regulariser
+        └── fastmri/         # vendored fastMRI ops (FFT, complex math, coil combine)
 ```
 
-## 3. Before you start
-* ```train.py``` 실행 후 ```recon_eval.py``` 하나로 reconstruction과 평가를 한 번에 진행하면 됩니다.
-* ```train.py```
-   * train/validation을 진행하고 학습한 model의 결과를 result 폴더에 저장합니다.
-   * 가장 성능이 좋은 모델의 weights을 ```best_model.pt```으로 저장합니다.
-* ```recon_eval.py```
-   * ```train.py```으로 학습한 ```best_model.pt```으로 leaderboard dataset을 reconstruction하면서 동시에 SSIM을 측정합니다.
-   * reconstruction 결과는 result 폴더에 저장됩니다.
-   * SSIM_full, SSIM_bbox 각각에 대해 acc4 / acc8 값과 평균을 출력합니다.
-   * acc4 / acc8 각각의 reconstruction 시간도 함께 출력됩니다. 이 추론 시간도 채점 기준에 포함되며, SSIM과 합산한 종합 점수 산정 방식은 추후 공지합니다.
-   * 같은 지표(```utils/common/metrics.py```)로 본인 validation reconstruction을 자가채점할 수 있습니다. (annotation은 각 image h5의 ```attrs['annotations']```에 포함)
-* ```recon_eval.py```와 ```utils/common/metrics.py```는 운영자가 그대로 다시 실행하는 **채점/시간측정 harness**이므로 수정하지 않는 것을 전제로 합니다. 모델 정의와 reconstruction 방식은 ```utils/model/```과 ```utils/learning/test_part.py```에서 자유롭게 수정하면 됩니다.
-* reconstruction과 평가를 나눠서 실행하고 싶다면 ```reconstruct.py``` → ```leaderboard_eval.py``` 순서도 그대로 사용할 수 있습니다. (참고용)
+`recon_eval.py` and `utils/common/metrics.py` are re-run unchanged by the organisers for
+scoring and timing. The harness only calls `load_model`, `prep_volume` and `recon_slice` from
+`utils/learning/test_part.py`; everything under `utils/model/` and `utils/learning/` is ours
+to change.
 
-## 4. How to set?
-(python 3.12.9)
+## Setup
+
+Python 3.12 and a CUDA GPU. The final configuration trains within 8 GB of VRAM with
+`--grad-checkpointing`; without it the 12-cascade model needs considerably more.
+
 ```bash
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-## 5. How to train?
+## Data layout
+
+The scripts expect the challenge layout below next to the repository. Paths are passed with
+`-t`, `-v` and `-p`, or by setting `DATA=/path/to/Data` before running the `.sh` wrappers.
+
+```
+Data/
+├── train/      image/knee_{acc4,acc8}_{1..85}.h5   kspace/knee_{acc4,acc8}_{1..85}.h5
+├── val/        image/knee_{acc4,acc8}_{1..15}.h5   kspace/knee_{acc4,acc8}_{1..15}.h5
+└── leaderboard/{acc4,acc8}/{image,kspace}/knee_test{1..29}.h5
+```
+
+- k-space files hold `kspace` (slices, coils, 640, W) and `mask` (W,). Width W varies between
+  320 and 480, which is why batch size is 1.
+- image files hold `image_label` (fully sampled target), `image_input`, `image_grappa`, the
+  `max` attribute used as SSIM data range, and lesion boxes in `attrs['annotations']`.
+- The leaderboard set is never used for training. Results go to `../result/<net_name>/`.
+
+![folder structure](docs/fastmri_folder_structure.png)
+![data structure](docs/fastmri_data_structure.png)
+
+## Usage
+
+### Train
+
 ```bash
-python train.py // sh train.sh
+bash train.sh            # final config, see the file for the exact flags
 ```
-- validation할 때, reconstruction data를 ```result/reconstructions_val/```에 저장합니다.
-- epoch 별로 validation dataset에 대한 loss를 기록합니다.
-- sh train.sh를 사용하여도 같은 결과를 얻으실 수 있습니다. Hyperparameter를 쉽게 조작할 수 있습니다.
-- 주요 hyperparameter (```train.sh```에서 조절):
-  - ```--cascade``` : cascade 개수 (기본 1, 원논문 12). 클수록 성능↑·메모리/시간↑
-  - ```--chans``` : cascade U-Net 채널 수 (기본 9, 원논문 18)
-  - ```--sens_chans``` : sensitivity map U-Net 채널 수 (기본 4, 원논문 8)
-- VarNet은 메모리 사용량이 크므로 batch size는 1을 기본으로 합니다.
-- **seed 고정**을 하여 이후에 Re-training하였을 때 **같은 결과가 나와야 합니다**.
 
-## 6. How to reconstruct & evaluate?
+equivalent to
+
 ```bash
-python recon_eval.py        # 또는
-sh recon_eval.sh            # -n 'test_Varnet' -p '/root/Data/leaderboard'
+python train.py -b 1 -e 100 -l 0.001 -r 10 -n test_Varnet \
+  --cascade 12 --chans 18 --sens_chans 8 --grad-checkpointing \
+  -t /root/Data/train/ -v /root/Data/val/
 ```
-- leaderboard dataset을 reconstruction하면서 동시에 SSIM_full, SSIM_bbox를 측정합니다.
-- reconstruction data는 ```result/reconstructions_leaderboard```에 acc별로 저장됩니다.
-- 4X / 8X sampling mask에 대한 SSIM_full, SSIM_bbox의 평균과 전체 reconstruction 시간(및 slice당 평균 시간)을 함께 출력합니다.
-- reconstruction 시간은 slice 한 장을 복원하는 model forward(```test_part.py```의 ```recon_slice```)만 batch=1로 측정하며, h5 입출력과 warmup slice는 제외하고 slice별 **평균**으로 집계합니다.
-- 하나의 볼륨(.h5)의 forward 시간이 60초를 초과하면 결과 하단에 ```[WARNING]``` 메시지가 출력됩니다. 추론이 지나치게 느리다는 뜻이므로 최적화가 필요합니다.
-- reconstruction과 평가를 나눠 실행하려면 ```reconstruct.py``` → ```leaderboard_eval.py```를 사용해도 됩니다. (참고용)
 
-### 실행 결과 예시 & 리더보드 기입
-```recon_eval.py``` (또는 ```recon_eval.sh```)를 실행하면 상단에 아래와 같은 요약이 출력됩니다.
-```text
-Leaderboard SSIM_full : 0.8469
-Leaderboard SSIM_bbox : 0.8354
-Leaderboard Recon Time : 193.96s (87.6 ms/slice)
+Key flags:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--cascade` | 1 | number of unrolled cascades (12 in the original VarNet) |
+| `--chans` | 9 | channels of the cascade U-Net (18 in the original) |
+| `--sens_chans` | 4 | channels of the sensitivity-map U-Net (8 in the original) |
+| `-l`, `--lr` | 1e-3 | peak learning rate of the OneCycle schedule |
+| `--accumulation_steps` | 1 | micro-batches per optimizer step |
+| `--grad-checkpointing` | off | recompute cascade activations in backward |
+| `--init-from` | none | single-VarNet checkpoint used to initialise both experts |
+| `--no-resume` | off | ignore an existing `best_model.pt` under the same `-n` |
+| `--seed` | 430 | random seed |
+
+Each epoch writes `model.pt`, updates `best_model.pt` on a new best validation SSIM, saves the
+validation reconstructions and appends to `val_loss_log.npy`.
+
+### Reconstruct and evaluate
+
+```bash
+bash recon_eval.sh       # python recon_eval.py -n test_Varnet -p /root/Data/leaderboard
 ```
-- 위 출력의 세 값 — **SSIM_full (`0.8469`), SSIM_bbox (`0.8354`), slice당 시간 (`87.6` ms/slice)** — 을 리더보드 웹에 그대로 기입하면 됩니다.
-- ```Recon Time```은 전체 시간(```193.96s```)과 slice당 평균(```87.6 ms/slice```)이 함께 표시되며, 리더보드에는 **slice당 시간(ms/slice)** 을 기입합니다.
-- ```= Details =``` 이하 acc4 / acc8 세부 값은 참고용이며 기입 대상이 아닙니다.
 
-## 7. What to submit!
-- github repository(코드 실행 방법 readme에 상세 기록)
-- loss 그래프 혹은 기록
-- 모델 weight file
-- 모델 설명 ppt
+prints the three leaderboard numbers (`SSIM_full`, `SSIM_bbox`, `ms/slice`) and the acc4/acc8
+breakdown, and writes reconstructions to `../result/test_Varnet/reconstructions_leaderboard/`.
+To split the steps, run `bash reconstruct.sh` followed by `bash leaderboard_eval.sh`.
+
+Model hyperparameters are read back from the checkpoint, so the evaluation scripts do not
+need the `--cascade`/`--chans` flags.
+
+## Reproducibility
+
+Seeds are fixed (`--seed 430`, `utils/common/utils.py::seed_fix`), which the competition
+requires for re-training verification. Batch size 1 is forced by the variable k-space width.
+
+## Branches
+
+| Branch | Content |
+|---|---|
+| `main` | final VarNet submission (this README) |
+| `sdum_net` | experiment: the dual-routing wrapper around an SDUM transformer-based unrolled model instead of VarNet, with unit tests; see `docs/sdum.md` on that branch |
+| others | historical steps (baseline import, individual optimizations, resume logic) that are folded into `main` |
+
+## Team
+
+- Kirill Cebekov ([@ManilaSR57](https://github.com/ManilaSR57)): acceleration-aware dual network and routing classifier, training optimizations (OneCycle LR, clipping, accumulation, gradient checkpointing), SDUM experiment
+- Kyoheon Kim ([@soomswida](https://github.com/soomswida)): checkpoint resume, data-loading pipeline, preprocessing and evaluation fixes
+
+## Acknowledgements
+
+- Baseline code and evaluation harness: [LISTatSNU/FastMRI_challenge](https://github.com/LISTatSNU/FastMRI_challenge), branch `2026_baby_varnet_phase2`.
+- VarNet, U-Net, SSIM loss and the ops under `utils/model/fastmri/` derive from
+  [facebookresearch/fastMRI](https://github.com/facebookresearch/fastMRI) (MIT), copyright
+  Facebook, Inc. and its affiliates.
+- Data: the fastMRI knee dataset [1] with fastMRI+ annotations, as distributed by the challenge.
+
+## References
+
+1. Zbontar, J., Knoll, F., Sriram, A., et al. (2018). fastMRI: An Open Dataset and Benchmarks for Accelerated MRI. arXiv:1811.08839.
+2. Sriram, A., Zbontar, J., Murrell, T., et al. (2020). End-to-End Variational Networks for Accelerated MRI Reconstruction. MICCAI, 64-73.
+3. Ronneberger, O., Fischer, P., Brox, T. (2015). U-Net: Convolutional Networks for Biomedical Image Segmentation. MICCAI, 234-241.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Third-party components keep their original notices.
