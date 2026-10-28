@@ -23,15 +23,8 @@ averaged over acc4 and acc8. Timing is the mean model forward time per slice at 
 
 | Model | SSIM_full | SSIM_bbox | ms / slice |
 |---|---|---|---|
-| Baseline single VarNet (3 cascades, 12 ch, 6 sens ch) | TODO | TODO | TODO |
-| **Dual VarNet, final** (12 cascades, 18 ch, 8 sens ch) | TODO | TODO | TODO |
-
-Per-acceleration detail of the final model:
-
-| | SSIM_full | SSIM_bbox | ms / slice |
-|---|---|---|---|
-| acc4 | TODO | TODO | TODO |
-| acc8 | TODO | TODO | TODO |
+| Baseline single VarNet (3 cascades, 12 ch, 6 sens ch) | 0.9045 | 0.8873 | 87.3 |
+| **Dual VarNet, final** (12 cascades, 18 ch, 8 sens ch) | 0.9214 | 0.9141 | 429.5 |
 
 ## Method
 
